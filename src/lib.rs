@@ -11,10 +11,10 @@ pub mod report;
 pub mod reprice;
 pub mod sample;
 pub mod series;
+pub mod settings_form;
 pub mod setup;
 pub mod store;
 pub mod tariff;
-pub mod tariff_form;
 pub mod time_range;
 
 #[cfg(test)]

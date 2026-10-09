@@ -358,7 +358,7 @@ mod tests {
         std::fs::write(&path, EXAMPLE_CONFIG).unwrap();
         let mut watcher = ConfigWatcher::new(&path);
         assert!(!watcher.changed());
-        crate::tariff_form::write_atomically(&path, EXAMPLE_CONFIG).unwrap();
+        crate::settings_form::write_atomically(&path, EXAMPLE_CONFIG).unwrap();
         // Coarse file-system timestamps could hide a write made in the same tick.
         let later = SystemTime::now() + Duration::from_secs(5);
         std::fs::File::options()
