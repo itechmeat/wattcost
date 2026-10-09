@@ -1,5 +1,5 @@
-//! The tariff as the settings form shows it: a currency and day and night periods with whole
-//! hours and final prices per kWh.
+//! The settings form: a currency, day and night periods with whole hours and final prices per
+//! kWh, and the constant power of the system and the monitor.
 
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -18,10 +18,14 @@ const MAX_CURRENCY_LEN: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct TariffForm {
+pub struct SettingsForm {
     pub currency: String,
     pub day: PeriodForm,
     pub night: PeriodForm,
+    /// Motherboard, memory, storage, network and fans, in watts.
+    pub base_watts: f64,
+    /// The monitor while it is on, in watts.
+    pub monitor_watts: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -56,7 +60,7 @@ impl From<toml_edit::TomlError> for FormError {
     }
 }
 
-impl TariffForm {
+impl SettingsForm {
     /// The form view of a tariff with exactly a `day` and a `night` period on whole hours.
     pub fn from_settings(settings: &Settings) -> Result<Self, FormError> {
         let config = &settings.config.tariff;
@@ -64,6 +68,8 @@ impl TariffForm {
             currency: config.currency.clone(),
             day: period_form(config, &settings.tariff, DAY)?,
             night: period_form(config, &settings.tariff, NIGHT)?,
+            base_watts: settings.config.hardware.base_watts,
+            monitor_watts: settings.config.hardware.monitor_watts,
         })
     }
 
@@ -73,15 +79,10 @@ impl TariffForm {
     pub fn apply(&self, text: &str) -> Result<Settings, FormError> {
         self.check()?;
         let mut document: DocumentMut = text.parse()?;
-        let item = document
-            .entry("tariff")
-            .or_insert(Item::Table(Table::new()));
-        if let Some(inline) = item.as_inline_table() {
-            *item = Item::Table(inline.clone().into_table());
-        }
-        let tariff = item
-            .as_table_mut()
-            .ok_or_else(|| FormError::NotSimple("`tariff` is not a table".to_owned()))?;
+        let hardware = table(&mut document, "hardware")?;
+        hardware["base_watts"] = value(self.base_watts);
+        hardware["monitor_watts"] = value(self.monitor_watts);
+        let tariff = table(&mut document, "tariff")?;
         tariff["currency"] = value(self.currency.trim());
         // Removing `periods` too drops the old key's formatting before the new tables go in.
         for replaced in [
@@ -119,8 +120,25 @@ impl TariffForm {
                 )));
             }
         }
+        for (name, watts) in [("system", self.base_watts), ("monitor", self.monitor_watts)] {
+            if !(watts.is_finite() && watts >= 0.0) {
+                return Err(FormError::Invalid(format!(
+                    "the {name} power must be a non-negative number of watts"
+                )));
+            }
+        }
         Ok(())
     }
+}
+
+/// The top-level table `name`, created when missing and expanded when written inline.
+fn table<'a>(document: &'a mut DocumentMut, name: &str) -> Result<&'a mut Table, FormError> {
+    let item = document.entry(name).or_insert(Item::Table(Table::new()));
+    if let Some(inline) = item.as_inline_table() {
+        *item = Item::Table(inline.clone().into_table());
+    }
+    item.as_table_mut()
+        .ok_or_else(|| FormError::NotSimple(format!("`{name}` is not a table")))
 }
 
 fn period_form(
@@ -209,8 +227,8 @@ pub fn write_atomically(path: &Path, text: &str) -> Result<(), FormError> {
 mod tests {
     use super::*;
 
-    fn form(day: (u8, u8, f64), night: (u8, u8, f64)) -> TariffForm {
-        TariffForm {
+    fn form(day: (u8, u8, f64), night: (u8, u8, f64)) -> SettingsForm {
+        SettingsForm {
             currency: "EUR".to_owned(),
             day: PeriodForm {
                 start_hour: day.0,
@@ -222,12 +240,14 @@ mod tests {
                 end_hour: night.1,
                 price: night.2,
             },
+            base_watts: 40.0,
+            monitor_watts: 40.0,
         }
     }
 
     #[test]
     fn shows_final_prices_of_the_example() {
-        let shown = TariffForm::from_settings(&Settings::example()).unwrap();
+        let shown = SettingsForm::from_settings(&Settings::example()).unwrap();
         assert_eq!(shown.currency, "EUR");
         assert_eq!((shown.day.start_hour, shown.day.end_hour), (7, 23));
         assert!((shown.day.price - (0.20 + 0.01) * 1.20).abs() < 1e-12);
@@ -242,11 +262,11 @@ mod tests {
         assert!(
             settings
                 .text
-                .contains("# Motherboard, memory, storage and fans, in watts.")
+                .contains("# Motherboard, memory, storage, network and fans, in watts.")
         );
         assert!(settings.text.contains("base_watts = 40.0"));
         assert!(!settings.text.contains("tax_multipliers"));
-        let shown = TariffForm::from_settings(&settings).unwrap();
+        let shown = SettingsForm::from_settings(&settings).unwrap();
         assert_eq!(shown, form((6, 22, 0.31), (22, 6, 0.12)));
     }
 
@@ -297,10 +317,10 @@ mod tests {
             "end = \"23:00\"\nprice = 0.20",
             "end = \"18:00\"\nprice = 0.20\n\n[[tariff.periods]]\nname = \"peak\"\nstart = \"18:00\"\nend = \"23:00\"\nprice = 0.40",
         );
-        let error = TariffForm::from_settings(&Settings::parse(three).unwrap()).unwrap_err();
+        let error = SettingsForm::from_settings(&Settings::parse(three).unwrap()).unwrap_err();
         assert!(error.to_string().contains("3 periods"), "{error}");
         let minutes = EXAMPLE_CONFIG.replace("\"07:00\"", "\"07:30\"");
-        let error = TariffForm::from_settings(&Settings::parse(minutes).unwrap()).unwrap_err();
+        let error = SettingsForm::from_settings(&Settings::parse(minutes).unwrap()).unwrap_err();
         assert!(error.to_string().contains("whole hours"), "{error}");
     }
 
@@ -358,11 +378,37 @@ mod tests {
         assert!(read.to_string().starts_with("cannot read"), "{read}");
     }
 
+    #[test]
+    fn applying_saves_the_power_constants() {
+        let mut changed = form((7, 23, 0.3), (23, 7, 0.1));
+        changed.base_watts = 55.5;
+        changed.monitor_watts = 32.0;
+        let settings = changed.apply(EXAMPLE_CONFIG).unwrap();
+        assert!(
+            settings.text.contains("base_watts = 55.5"),
+            "{}",
+            settings.text
+        );
+        assert!(settings.text.contains("psu_efficiency = 0.90"));
+        assert_eq!(SettingsForm::from_settings(&settings).unwrap(), changed);
+        let without_hardware = "[tariff]\ncurrency = \"EUR\"\n";
+        let settings = changed.apply(without_hardware).unwrap();
+        assert_eq!(settings.config.hardware.monitor_watts, 32.0);
+    }
+
+    #[test]
+    fn negative_power_is_rejected() {
+        let mut negative = form((7, 23, 0.3), (23, 7, 0.1));
+        negative.monitor_watts = -1.0;
+        let error = negative.apply(EXAMPLE_CONFIG).unwrap_err();
+        assert!(error.to_string().contains("monitor power"), "{error}");
+    }
+
     /// The settings card reads and writes these names.
     #[test]
     fn json_field_names_match_the_settings_card() {
-        let json =
-            serde_json::to_value(TariffForm::from_settings(&Settings::example()).unwrap()).unwrap();
+        let json = serde_json::to_value(SettingsForm::from_settings(&Settings::example()).unwrap())
+            .unwrap();
         let keys = |value: &serde_json::Value| {
             value
                 .as_object()
@@ -373,7 +419,10 @@ mod tests {
         };
         let mut top = keys(&json);
         top.sort();
-        assert_eq!(top, ["currency", "day", "night"]);
+        assert_eq!(
+            top,
+            ["base_watts", "currency", "day", "monitor_watts", "night"]
+        );
         let mut period = keys(&json["day"]);
         period.sort();
         assert_eq!(period, ["end_hour", "price", "start_hour"]);

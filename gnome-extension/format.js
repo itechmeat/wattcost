@@ -42,8 +42,8 @@ export function parseHour(text) {
     return hour <= 23 ? hour : null;
 }
 
-/** A non-negative price typed with a dot or a comma, or null. */
-export function parsePrice(text) {
+/** A non-negative number typed with a dot or a comma, or null. */
+export function parseAmount(text) {
     const trimmed = text.trim().replace(',', '.');
     if (!/^\d+(\.\d+)?$/.test(trimmed))
         return null;
@@ -51,12 +51,13 @@ export function parsePrice(text) {
 }
 
 const PERIOD_TITLES = {day: 'Day', night: 'Night'};
+const POWER_TITLES = {base_watts: 'System', monitor_watts: 'Monitor'};
 
 /**
  * The settings card's texts as `wattcost config set` expects them. Throws an Error whose message
  * is shown to the user; overlaps and gaps between the periods are checked by wattcost itself.
  */
-export function readTariffForm(texts) {
+export function readSettingsForm(texts) {
     const currency = texts.currency.trim();
     if (!currency)
         throw new Error('Enter a currency.');
@@ -64,12 +65,18 @@ export function readTariffForm(texts) {
     for (const [key, title] of Object.entries(PERIOD_TITLES)) {
         const period = texts[key];
         const [start, end] = [parseHour(period.start), parseHour(period.end)];
-        const price = parsePrice(period.price);
+        const price = parseAmount(period.price);
         if (start === null || end === null)
             throw new Error(`${title}: hours must be whole numbers from 0 to 23.`);
         if (price === null)
             throw new Error(`${title}: enter the price per kWh as a number.`);
         form[key] = {start_hour: start, end_hour: end, price};
+    }
+    for (const [key, title] of Object.entries(POWER_TITLES)) {
+        const watts = parseAmount(texts[key]);
+        if (watts === null)
+            throw new Error(`${title}: enter the power in watts as a number.`);
+        form[key] = watts;
     }
     return form;
 }

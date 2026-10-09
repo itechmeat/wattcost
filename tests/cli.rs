@@ -48,12 +48,12 @@ impl Wattcost {
     }
 }
 
-const TARIFF: &str = r#"{"currency":"USD","day":{"start_hour":6,"end_hour":22,"price":0.31},"night":{"start_hour":22,"end_hour":6,"price":0.12}}"#;
+const SETTINGS: &str = r#"{"currency":"USD","day":{"start_hour":6,"end_hour":22,"price":0.31},"night":{"start_hour":22,"end_hour":6,"price":0.12},"base_watts":35.0,"monitor_watts":28.5}"#;
 
 #[test]
 fn config_set_then_show_round_trips() {
     let wattcost = Wattcost::new();
-    let output = wattcost.run(&["config", "set"], TARIFF);
+    let output = wattcost.run(&["config", "set"], SETTINGS);
     assert!(
         output.status.success(),
         "{}",
@@ -62,16 +62,16 @@ fn config_set_then_show_round_trips() {
     let shown = wattcost.json(&["config", "show"]);
     assert_eq!(
         shown,
-        serde_json::from_str::<serde_json::Value>(TARIFF).unwrap()
+        serde_json::from_str::<serde_json::Value>(SETTINGS).unwrap()
     );
 }
 
 #[test]
 fn config_set_reports_problems_without_saving() {
     let wattcost = Wattcost::new();
-    let overlap = TARIFF.replace(r#""start_hour":22"#, r#""start_hour":21"#);
+    let overlap = SETTINGS.replace(r#""start_hour":22"#, r#""start_hour":21"#);
     for (input, expected) in [
-        ("not json", "reading the tariff JSON"),
+        ("not json", "reading the settings JSON"),
         (overlap.as_str(), "overlap at 21:00"),
     ] {
         let output = wattcost.run(&["config", "set"], input);

@@ -6,13 +6,21 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {runWattcost} from './data.js';
-import {readTariffForm} from './format.js';
+import {readSettingsForm} from './format.js';
 
 export const SETTINGS_ICON = 'emblem-system-symbolic';
 
 /** The same timing as GNOME's quick settings menus: the height grows, then the content fades in. */
 const ANIMATION_MS = 125;
 const PERIODS = [['day', 'Day'], ['night', 'Night']];
+const POWER = [
+    ['base_watts', 'System', 'motherboard, memory, disks, network and fans'],
+    ['monitor_watts', 'Monitor', "while the screen is on, from its datasheet; 0 for a laptop"],
+];
+/** A fixed width makes long texts wrap instead of widening the whole menu. */
+const TEXT_WIDTH = 'width: 280px;';
+/** Leaves room for the entry at the right of a hinted title. */
+const HINT_WIDTH = 'width: 250px;';
 
 /**
  * Themes paint entries and buttons in nearly the colour of the quick settings card; a slight shade
@@ -33,6 +41,35 @@ function label(text, styleClass = null) {
     const widget = new St.Label({text, style_class: styleClass, y_align: Clutter.ActorAlign.CENTER});
     widget.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
     return widget;
+}
+
+/** toPrecision drops float noise from computed values without rounding real digits. */
+function decimal(value) {
+    return String(Number(value.toPrecision(12)));
+}
+
+function wrapping(widget) {
+    widget.clutter_text.line_wrap = true;
+    widget.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+    return widget;
+}
+
+/** Secondary text that wraps within the card. */
+function note(text, style) {
+    return wrapping(new St.Label({text, style_class: 'subtitle', style: `${TEXT_WIDTH} ${style}`}));
+}
+
+/** A title followed by a smaller, dimmed hint in parentheses, wrapping as one paragraph. */
+function hinted(title, hint) {
+    const widget = wrapping(new St.Label({x_expand: true, y_align: Clutter.ActorAlign.CENTER, style: HINT_WIDTH}));
+    const escape = text => GLib.markup_escape_text(text, -1);
+    widget.clutter_text.set_markup(`${escape(title)} <span size="small" alpha="70%">(${escape(hint)})</span>`);
+    return widget;
+}
+
+/** Keeps a column's content on the card's right edge, in line with the Save button. */
+function alignRight(widget) {
+    return Object.assign(widget, {x_expand: true, x_align: Clutter.ActorAlign.END});
 }
 
 /** An hour entry followed by ":00". */
@@ -91,28 +128,36 @@ export const SettingsCard = GObject.registerClass({
         layout.attach(label('Currency'), 0, 0, 1, 1);
         layout.attach(this._currency, 1, 0, 3, 1);
         layout.attach(label('Hours', 'subtitle'), 1, 1, 3, 1);
-        // The price column takes the spare width and keeps its content on the card's right edge,
-        // in line with the Save button.
-        const priceCaption = label('Per kWh', 'subtitle');
-        Object.assign(priceCaption, {x_expand: true, x_align: Clutter.ActorAlign.END});
-        layout.attach(priceCaption, 4, 1, 1, 1);
+        // The last column takes the spare width.
+        layout.attach(alignRight(label('Per kWh', 'subtitle')), 4, 1, 1, 1);
         this._periods = new Map(PERIODS.map(([key, title], index) => {
             const fields = {start: entry(1.6), end: entry(1.6), price: entry(3.4)};
             const row = index + 2;
             // "7:00 – 23:00" reads as a time range without extra captions.
             [label(title), hourCell(fields.start), label('–'), hourCell(fields.end)]
                 .forEach((child, column) => layout.attach(child, column, row, 1, 1));
-            Object.assign(fields.price, {x_expand: true, x_align: Clutter.ActorAlign.END});
-            layout.attach(fields.price, 4, row, 1, 1);
+            layout.attach(alignRight(fields.price), 4, row, 1, 1);
             fields.price.clutter_text.connect('activate', () => this._save());
             return [key, fields];
         }));
         this._box.add_child(grid);
 
-        // A fixed width makes long messages wrap instead of widening the whole menu.
-        this._error = new St.Label({style_class: 'subtitle', style: 'width: 280px; padding-top: 8px;'});
-        this._error.clutter_text.line_wrap = true;
-        this._error.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+        // Outside the grid, where wrapped hints get their height.
+        const power = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style: 'spacing: 12px; padding-top: 16px;'});
+        power.add_child(alignRight(label('Watts', 'subtitle')));
+        this._power = new Map(POWER.map(([key, title, help]) => {
+            const field = entry(2.6);
+            Object.assign(field, {x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.CENTER});
+            const row = new St.BoxLayout({style: 'spacing: 12px;'});
+            row.add_child(hinted(title, help));
+            row.add_child(field);
+            power.add_child(row);
+            field.clutter_text.connect('activate', () => this._save());
+            return [key, field];
+        }));
+        this._box.add_child(power);
+
+        this._error = note('', 'padding-top: 8px;');
         this._error.visible = false;
         this._box.add_child(this._error);
     }
@@ -209,9 +254,10 @@ export const SettingsCard = GObject.registerClass({
             const fields = this._periods.get(key);
             fields.start.text = String(form[key].start_hour);
             fields.end.text = String(form[key].end_hour);
-            // toPrecision drops float noise from computed prices without rounding real digits.
-            fields.price.text = String(Number(form[key].price.toPrecision(12)));
+            fields.price.text = decimal(form[key].price);
         }
+        for (const [key] of POWER)
+            this._power.get(key).text = decimal(form[key]);
     }
 
     _readForm() {
@@ -220,7 +266,9 @@ export const SettingsCard = GObject.registerClass({
             const fields = this._periods.get(key);
             texts[key] = {start: fields.start.text, end: fields.end.text, price: fields.price.text};
         }
-        return readTariffForm(texts);
+        for (const [key] of POWER)
+            texts[key] = this._power.get(key).text;
+        return readSettingsForm(texts);
     }
 
     async _save() {

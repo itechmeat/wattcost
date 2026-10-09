@@ -15,8 +15,8 @@ use crate::config::{self, ConfigSource};
 use crate::extension::{self, Outcome};
 use crate::providers::{self, FsRoot};
 use crate::reprice::{self, Totals};
+use crate::settings_form::{self, SettingsForm};
 use crate::store::Store;
-use crate::tariff_form::{self, TariffForm};
 use crate::time_range::{self, Range, Span};
 use crate::{report, series, setup};
 
@@ -43,7 +43,7 @@ enum Command {
     Report(ReportArgs),
     /// Recompute stored prices for a date range with the current config
     Reprice(RepriceArgs),
-    /// Show or change the tariff that the panel settings form edits
+    /// Show or change the settings that the panel settings form edits
     Config {
         #[command(subcommand)]
         action: ConfigAction,
@@ -77,7 +77,7 @@ enum ExtensionAction {
 
 #[derive(Subcommand)]
 enum ConfigAction {
-    /// Print the currency and the day and night periods with final prices as JSON
+    /// Print the tariff with final prices and the system and monitor power as JSON
     Show,
     /// Read that JSON from stdin, check it and save it to the config file
     Set,
@@ -124,10 +124,10 @@ pub fn main() -> ExitCode {
         Command::Series { span } => print_series(&config_path, span),
         Command::Config {
             action: ConfigAction::Show,
-        } => show_tariff(&config_path),
+        } => show_settings(&config_path),
         Command::Config {
             action: ConfigAction::Set,
-        } => set_tariff(&config_path),
+        } => set_settings(&config_path),
         Command::Setup {
             no_enable,
             no_extension,
@@ -220,20 +220,20 @@ fn report(config_path: &Path, args: &ReportArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn show_tariff(config_path: &Path) -> anyhow::Result<()> {
+fn show_settings(config_path: &Path) -> anyhow::Result<()> {
     let (settings, _) = config::load_or_example(config_path)?;
     println!(
         "{}",
-        serde_json::to_string(&TariffForm::from_settings(&settings)?)?
+        serde_json::to_string(&SettingsForm::from_settings(&settings)?)?
     );
     Ok(())
 }
 
-fn set_tariff(config_path: &Path) -> anyhow::Result<()> {
-    let form: TariffForm =
-        serde_json::from_reader(std::io::stdin().lock()).context("reading the tariff JSON")?;
-    let settings = form.apply(&tariff_form::current_text(config_path)?)?;
-    tariff_form::write_atomically(config_path, &settings.text)?;
+fn set_settings(config_path: &Path) -> anyhow::Result<()> {
+    let form: SettingsForm =
+        serde_json::from_reader(std::io::stdin().lock()).context("reading the settings JSON")?;
+    let settings = form.apply(&settings_form::current_text(config_path)?)?;
+    settings_form::write_atomically(config_path, &settings.text)?;
     Ok(())
 }
 

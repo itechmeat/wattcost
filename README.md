@@ -56,7 +56,7 @@ Linux only for now. macOS and Windows support is planned.
 
 ## Configure
 
-The gear button in the indicator's menu changes the currency and the hours and prices of the day and night rates; `wattcost config show` and `wattcost config set` do the same from a terminal. Everything else lives in `~/.config/wattcost/config.toml` (see [config.example.toml](config.example.toml)). The running service picks up changes automatically; collector intervals and provider switches apply after `systemctl --user restart wattcost`.
+The gear button in the indicator's menu changes the currency, the hours and prices of the day and night rates, and two constants: the power of the parts without a sensor (motherboard, memory, disks, network and fans) and of the monitor while it is on. For the best numbers, take them from a wall power meter or the monitor's datasheet. `wattcost config show` and `wattcost config set` do the same from a terminal. Everything else lives in `~/.config/wattcost/config.toml` (see [config.example.toml](config.example.toml)). The running service picks up changes automatically; collector intervals and provider switches apply after `systemctl --user restart wattcost`.
 
 The file can also describe a bill the way it is printed, with more periods and separate discounts, fees and taxes. The price of one kWh in a period is then
 

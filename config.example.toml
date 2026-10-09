@@ -6,7 +6,7 @@ write_interval_s = 60
 # database = "~/.local/share/wattcost/wattcost.db"
 
 [hardware]
-# Motherboard, memory, storage and fans, in watts.
+# Motherboard, memory, storage, network and fans, in watts.
 base_watts = 40.0
 # Share of wall power the power supply delivers to the components.
 psu_efficiency = 0.90
