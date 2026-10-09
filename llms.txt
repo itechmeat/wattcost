@@ -1,0 +1,88 @@
+# wattcost
+
+> wattcost logs how much electricity a Linux computer uses and what it costs, and shows today's cost in the GNOME top bar. These are instructions for a coding agent that installs it for a user.
+
+Repository: https://github.com/itechmeat/wattcost
+
+## Install wattcost for the user
+
+Work through the steps in order. Explain each step to the user in one short sentence before running it. Ask before anything that needs `sudo` and before anything that changes the user's desktop session.
+
+### 1. Check the machine
+
+1. It must be Linux with systemd: `uname -s` prints `Linux` and `systemctl --user status` works.
+2. Note the desktop: `echo $XDG_CURRENT_DESKTOP` and `gnome-shell --version`. The top bar indicator needs GNOME Shell 50; on other desktops install only the logger (steps 2–6) and tell the user that `wattcost report` shows the numbers.
+3. A Rust toolchain must exist: `cargo --version`. If it is missing, ask the user, then install it with `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y` and `. "$HOME/.cargo/env"`.
+4. A C compiler is needed for the bundled SQLite: `cc --version`. If it is missing, ask the user to allow installing it (`sudo apt install build-essential` on Debian and Ubuntu, `sudo dnf install gcc` on Fedora).
+
+### 2. Build and install
+
+```sh
+git clone https://github.com/itechmeat/wattcost.git ~/wattcost
+cd ~/wattcost
+if latest=$(git describe --tags --abbrev=0 2>/dev/null); then git checkout "$latest"; fi
+cargo install --path . --locked
+wattcost detect
+```
+
+The checkout uses the latest release tag when the repository has one; tell the user if it builds the development branch instead. `wattcost detect` lists the sensors it found. Report them to the user in plain words (for example "CPU power is measured, the NVIDIA GPU is measured, the monitor state is read from GNOME").
+
+### 3. Ask the user for the electricity price
+
+Ask the user:
+
+> What do you pay for electricity? Tell me the currency and the price per kWh, and the hours of the day and night rates if you have two rates. You can also send a photo of your electricity bill.
+
+Then work out three things: the currency code (for example `EUR`, `USD`, `GBP`), the day rate and the night rate.
+
+1. A single rate: use the same price for day and night (day 7–23, night 23–7).
+2. A bill photo: find the price per kWh for each rate. Bills often list a base price plus discounts, per-kWh fees and taxes. wattcost needs the final price per kWh: apply the discount to the base price, add the per-kWh fees, then apply each tax in order: `(base × (1 − discount) + fees) × (1 + tax1) × (1 + tax2)`. Leave out fixed monthly charges that do not depend on consumption.
+3. Hours must be whole hours from 0 to 23. Day and night must not overlap and together must cover all 24 hours: night starts where day ends.
+
+Show the user the numbers you will use and wait for a yes. Then save them:
+
+```sh
+echo '{"currency":"EUR","day":{"start_hour":7,"end_hour":23,"price":0.25},"night":{"start_hour":23,"end_hour":7,"price":0.13}}' | wattcost config set
+wattcost config show
+```
+
+`wattcost config set` checks the values and prints the reason if they are wrong.
+
+### 4. Hardware constants (optional)
+
+Defaults in `~/.config/wattcost/config.toml` under `[hardware]`: 40 W for the motherboard, memory, storage and fans, 90 % power supply efficiency, 40 W for an external monitor. Ask the user only if they know better values, for example a laptop: set `monitor_watts = 0.0`.
+
+### 5. Start the background service
+
+```sh
+wattcost setup
+```
+
+It installs and starts a systemd user service. If it prints the udev instructions for CPU energy (RAPL), explain the choice to the user: the rule gives exact CPU power but lets members of a `wattcost` group read the CPU energy counter (CVE-2020-8694). Run those `sudo` commands only if the user agrees; without them wattcost uses another CPU sensor or an estimate.
+
+If `loginctl show-user "$(id -u)" --property=Linger --value` prints `no`, offer `loginctl enable-linger` so the service also runs before login.
+
+### 6. Install the top bar indicator (GNOME 50 only)
+
+Ask the user first: this adds a GNOME Shell extension and enables it.
+
+```sh
+~/wattcost/gnome-extension/install.sh
+```
+
+Tell the user to log out and back in once: GNOME on Wayland loads a newly installed extension only at login. After that a lightning-bolt icon with today's cost appears in the top bar; the gear button in its menu changes the currency and the day and night prices.
+
+### 7. Check
+
+After two minutes, `wattcost report` must show a row for the current period with a cost. If it shows no data, check `systemctl --user status wattcost` and `journalctl --user -u wattcost`.
+
+## Update
+
+Ask the user before updating, then:
+
+```sh
+cd ~/wattcost && git fetch --tags && git checkout "$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo origin/main)"
+cargo install --path . --locked && systemctl --user restart wattcost
+```
+
+On GNOME, then run `~/wattcost/gnome-extension/install.sh`. It reloads the indicator in the running session; if it says that `extension.js` changed, ask the user to log out and back in once.

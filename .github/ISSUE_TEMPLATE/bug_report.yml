@@ -1,0 +1,38 @@
+name: Bug report
+description: Something does not work or shows wrong numbers.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: detect
+    attributes:
+      label: Output of `wattcost detect`
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "`journalctl --user -u wattcost --since -1h` and, for the top bar indicator, `journalctl --user --since -10min | grep -i wattcost`."
+      render: text
+  - type: input
+    id: system
+    attributes:
+      label: System
+      description: Distribution, desktop and its version (for example Ubuntu 26.04, GNOME 50).
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: wattcost version
+      description: Output of `wattcost --version`.
+    validations:
+      required: true

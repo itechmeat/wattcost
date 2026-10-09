@@ -1,0 +1,7 @@
+/target
+/.zvec-grep/
+/.code-ranker/
+*.db
+*.db-wal
+*.db-shm
+/.superpowers/

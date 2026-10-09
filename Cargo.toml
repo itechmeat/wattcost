@@ -1,0 +1,57 @@
+[package]
+name = "wattcost"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.87"
+description = "Background logger that measures a computer's power draw and prices it with your electricity tariff"
+license = "Apache-2.0"
+repository = "https://github.com/itechmeat/wattcost"
+homepage = "https://github.com/itechmeat/wattcost"
+readme = "README.md"
+keywords = ["power", "energy", "electricity", "rapl", "monitoring"]
+categories = ["command-line-utilities", "hardware-support"]
+include = ["/src/**", "/migrations/**", "/config.example.toml", "/README.md", "/LICENSE", "/NOTICE", "/CHANGELOG.md"]
+
+[dependencies]
+anyhow = "1.0.104"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+clap = { version = "4.6.7", features = ["derive"] }
+dirs = "7.0.0"
+nvml-wrapper = "0.13.0"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+signal-hook = "0.4.5"
+tempfile = "3.27.0"
+thiserror = "2.0.21"
+toml = "1.1.8"
+toml_edit = "0.25.17"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+zbus = "5.19.0"
+
+[dev-dependencies]
+chrono-tz = "0.10.4"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+correctness = { level = "deny", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+cast_lossless = "warn"
+cast_possible_truncation = "warn"
+cast_sign_loss = "warn"
+redundant_closure_for_method_calls = "warn"
+semicolon_if_nothing_returned = "warn"
+uninlined_format_args = "warn"
+unnecessary_wraps = "warn"
+needless_pass_by_value = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

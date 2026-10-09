@@ -1,0 +1,8 @@
+{
+  "uuid": "wattcost@itechmeat.github.io",
+  "name": "wattcost",
+  "description": "Shows today's electricity cost of this computer in the top bar, with a chart of the spending rate and the power for today, the week and the month. Needs the wattcost logger.",
+  "shell-version": ["50"],
+  "url": "https://github.com/itechmeat/wattcost",
+  "version-name": "0.1.0"
+}

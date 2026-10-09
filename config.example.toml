@@ -1,0 +1,42 @@
+# wattcost configuration. Copy to ~/.config/wattcost/config.toml and adjust.
+
+[collector]
+sample_interval_s = 2
+write_interval_s = 60
+# database = "~/.local/share/wattcost/wattcost.db"
+
+[hardware]
+# Motherboard, memory, storage and fans, in watts.
+base_watts = 40.0
+# Share of wall power the power supply delivers to the components.
+psu_efficiency = 0.90
+# External monitor power while it is on; 0 for a laptop's built-in screen.
+monitor_watts = 40.0
+# Used when the monitor state cannot be read.
+monitor_assumed_on = true
+# Used only when CPU energy cannot be measured.
+cpu_idle_watts = 20.0
+cpu_max_watts = 120.0
+# Force providers on or off: rapl, cpu_stat, cpu_estimate, nvml, amdgpu, battery, display.
+# providers = { amdgpu = false }
+
+[tariff]
+currency = "EUR"
+# Discounts that apply to the energy price only, e.g. 0.95 for 5 % off.
+energy_multiplier = 1.0
+# Fixed surcharges per kWh.
+per_kwh_fees = [0.01]
+# Taxes applied in order, e.g. [1.075, 1.20] for 7.5 % excise and then 20 % VAT.
+tax_multipliers = [1.20]
+
+[[tariff.periods]]
+name = "day"
+start = "07:00"
+end = "23:00"
+price = 0.20
+
+[[tariff.periods]]
+name = "night"
+start = "23:00"
+end = "07:00"
+price = 0.10

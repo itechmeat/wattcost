@@ -1,0 +1,16 @@
+name: Feature request
+description: Suggest a sensor, a desktop or another improvement.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do
+      description: The problem or the use case, not only the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware or desktop involved
+      description: For a new sensor, the device and what `/sys` or the driver exposes for it.
