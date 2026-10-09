@@ -11,21 +11,19 @@ Work through the steps in order. Explain each step to the user in one short sent
 ### 1. Check the machine
 
 1. It must be Linux with systemd: `uname -s` prints `Linux` and `systemctl --user status` works.
-2. Note the desktop: `echo $XDG_CURRENT_DESKTOP` and `gnome-shell --version`. The top bar indicator needs GNOME Shell 50; on other desktops install only the logger (steps 2–6) and tell the user that `wattcost report` shows the numbers.
-3. A Rust toolchain must exist: `cargo --version`. If it is missing, ask the user, then install it with `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y` and `. "$HOME/.cargo/env"`.
-4. A C compiler is needed for the bundled SQLite: `cc --version`. If it is missing, ask the user to allow installing it (`sudo apt install build-essential` on Debian and Ubuntu, `sudo dnf install gcc` on Fedora).
+2. Note the CPU architecture (`uname -m`) and the desktop: `echo $XDG_CURRENT_DESKTOP` and `gnome-shell --version`. The top bar indicator needs GNOME Shell 50; on other desktops tell the user that `wattcost report` shows the numbers.
 
-### 2. Build and install
+### 2. Install the binary
+
+On Linux x86_64 or aarch64, install the latest release build (it verifies the download's checksum and puts the binary in `~/.local/bin`):
 
 ```sh
-git clone https://github.com/itechmeat/wattcost.git ~/wattcost
-cd ~/wattcost
-if latest=$(git describe --tags --abbrev=0 2>/dev/null); then git checkout "$latest"; fi
-cargo install --path . --locked
-wattcost detect
+curl -fsSL https://raw.githubusercontent.com/itechmeat/wattcost/main/install.sh | sh
 ```
 
-The checkout uses the latest release tag when the repository has one; tell the user if it builds the development branch instead. `wattcost detect` lists the sensors it found. Report them to the user in plain words (for example "CPU power is measured, the NVIDIA GPU is measured, the monitor state is read from GNOME").
+If `cargo binstall --version` works, `cargo binstall -y wattcost` installs the same build. On other architectures, or if the user prefers to build from source, use `cargo install wattcost --locked`; it needs a Rust toolchain (`cargo --version`; if it is missing, ask the user, then install it with `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y` and `. "$HOME/.cargo/env"`) and a C compiler (`cc --version`; if it is missing, ask the user to allow `sudo apt install build-essential` on Debian and Ubuntu or `sudo dnf install gcc` on Fedora).
+
+Make sure `wattcost --version` works in a new shell (the release script prints how to add `~/.local/bin` to `PATH` when it is missing). Then run `wattcost detect`: it lists the sensors it found. Report them to the user in plain words (for example "CPU power is measured, the NVIDIA GPU is measured, the monitor state is read from GNOME").
 
 ### 3. Ask the user for the electricity price
 
@@ -52,37 +50,31 @@ wattcost config show
 
 Defaults in `~/.config/wattcost/config.toml` under `[hardware]`: 40 W for the motherboard, memory, storage and fans, 90 % power supply efficiency, 40 W for an external monitor. Ask the user only if they know better values, for example a laptop: set `monitor_watts = 0.0`.
 
-### 5. Start the background service
+### 5. Start the service and the top bar indicator
+
+On GNOME 50, ask the user first whether they want the top bar indicator: `wattcost setup` installs and enables a GNOME Shell extension. If they decline, add `--no-extension`.
 
 ```sh
 wattcost setup
 ```
 
-It installs and starts a systemd user service. If it prints the udev instructions for CPU energy (RAPL), explain the choice to the user: the rule gives exact CPU power but lets members of a `wattcost` group read the CPU energy counter (CVE-2020-8694). Run those `sudo` commands only if the user agrees; without them wattcost uses another CPU sensor or an estimate.
+It installs and starts a systemd user service and, on GNOME, the indicator. Tell the user to log out and back in once: GNOME on Wayland loads a newly installed extension only at login. After that a lightning-bolt icon with today's cost appears in the top bar; the gear button in its menu changes the currency and the day and night prices.
+
+If `setup` prints the udev instructions for CPU energy (RAPL), explain the choice to the user: the rule gives exact CPU power but lets members of a `wattcost` group read the CPU energy counter (CVE-2020-8694). Run those `sudo` commands only if the user agrees; without them wattcost uses another CPU sensor or an estimate.
 
 If `loginctl show-user "$(id -u)" --property=Linger --value` prints `no`, offer `loginctl enable-linger` so the service also runs before login.
 
-### 6. Install the top bar indicator (GNOME 50 only)
-
-Ask the user first: this adds a GNOME Shell extension and enables it.
-
-```sh
-~/wattcost/gnome-extension/install.sh
-```
-
-Tell the user to log out and back in once: GNOME on Wayland loads a newly installed extension only at login. After that a lightning-bolt icon with today's cost appears in the top bar; the gear button in its menu changes the currency and the day and night prices.
-
-### 7. Check
+### 6. Check
 
 After two minutes, `wattcost report` must show a row for the current period with a cost. If it shows no data, check `systemctl --user status wattcost` and `journalctl --user -u wattcost`.
 
 ## Update
 
-Ask the user before updating, then:
+Ask the user before updating. Install the new version the same way as in step 2 (run the release script again, `cargo binstall -y wattcost` or `cargo install wattcost --locked`), then:
 
 ```sh
-cd ~/wattcost && git fetch --tags && git checkout "$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo origin/main)"
-cargo install --path . --locked && systemctl --user restart wattcost
+systemctl --user restart wattcost
+wattcost extension install
 ```
 
-On GNOME, then run `~/wattcost/gnome-extension/install.sh`. It reloads the indicator in the running session; if it says that `extension.js` changed, ask the user to log out and back in once.
+The second command reloads the indicator in the running session; if it says to log out, ask the user to log out and back in once.

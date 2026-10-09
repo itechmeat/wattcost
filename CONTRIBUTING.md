@@ -24,7 +24,7 @@ code-ranker check gnome-extension --plugins js
 
 ## GNOME extension
 
-New modules in `gnome-extension/` must be added to the copy list in `gnome-extension/install.sh`. Check visual changes in a headless shell (`gnome-shell --headless --virtual-monitor` in its own `dbus-run-session`) rather than in your own session.
+The binary embeds the extension: new modules in `gnome-extension/` must be added to `MODULES` in `src/extension.rs`. `gnome-extension/install.sh` builds the checkout and installs the extension from it, reloading it in the running session. Check visual changes in a headless shell (`gnome-shell --headless --virtual-monitor` in its own `dbus-run-session`) rather than in your own session.
 
 ## Style
 

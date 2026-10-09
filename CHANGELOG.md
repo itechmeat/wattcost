@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
-## [0.1.0] - unreleased
+## [0.1.0] - 2026-10-09
 
 ### Added
 
@@ -12,4 +12,6 @@ All notable changes to this project are documented here. The format follows [Kee
 - Time-of-use pricing with periods, discounts, per-kWh fees and taxes; prices are stored with every row and `reprice` recomputes a date range.
 - Commands: `detect`, `run`, `report`, `reprice`, `setup` (systemd user service and the optional RAPL udev rule), `series` (JSON for charts) and `config show`/`config set` (currency and day and night rates).
 - GNOME Shell 50 extension: today's cost in the top bar; a chart of the spending rate, total power and CPU and GPU power for today, the last week or the current month; a settings card for the currency and the day and night rates; `install.sh` reloads it without logging out.
+- The extension is built into the binary: `wattcost setup` installs it on GNOME and `wattcost extension install` installs or updates it.
+- Release builds for Linux x86_64 and aarch64 on GitHub, installable with `install.sh`, `cargo binstall wattcost` or `cargo install wattcost`.
 - `llms.txt` with installation instructions for coding agents.

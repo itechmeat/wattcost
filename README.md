@@ -16,24 +16,27 @@ Paste this into Claude Code, Codex or another coding agent on the computer:
 Install wattcost for me by following https://raw.githubusercontent.com/itechmeat/wattcost/main/llms.txt
 ```
 
-The agent checks your system, builds wattcost, asks for your electricity prices (you can send it a photo of your bill) and sets up the service and the top bar indicator. [llms.txt](llms.txt) holds its instructions.
+The agent checks your system, installs wattcost, asks for your electricity prices (you can send it a photo of your bill) and sets up the service and the top bar indicator. [llms.txt](llms.txt) holds its instructions.
 
 ### The manual way
 
-1. Install a Rust toolchain ([rustup](https://rustup.rs)) and a C compiler (`build-essential` or `gcc`).
-2. Build and install:
+1. Install the binary in one of three ways:
    ```sh
-   git clone https://github.com/itechmeat/wattcost.git
-   cd wattcost
-   cargo install --path . --locked
-   wattcost detect
+   # A release build, no Rust needed (Linux x86_64 or aarch64):
+   curl -fsSL https://raw.githubusercontent.com/itechmeat/wattcost/main/install.sh | sh
+   # The same release build through cargo-binstall:
+   cargo binstall wattcost
+   # Or build it from crates.io (needs Rust and a C compiler):
+   cargo install wattcost --locked
    ```
+2. Check the sensors: `wattcost detect`.
 3. Set your currency and the final price per kWh (discounts, fees and taxes included) of your day and night rates:
    ```sh
    echo '{"currency":"EUR","day":{"start_hour":7,"end_hour":23,"price":0.25},"night":{"start_hour":23,"end_hour":7,"price":0.13}}' | wattcost config set
    ```
-4. Start the background service with `wattcost setup`. User services run while you are logged in; `loginctl enable-linger` keeps it running from boot. Reading the RAPL CPU energy counter needs a udev rule; `setup` prints the commands and explains the security trade-off (CVE-2020-8694). Without it, wattcost uses an AMD integrated GPU's package power when there is one, and otherwise estimates CPU power.
-5. On GNOME 50, install the top bar indicator with `gnome-extension/install.sh`, then log out and back in once.
+4. Run `wattcost setup`. It starts the background service and, on GNOME 50, installs the top bar indicator; log out and back in once to see the indicator. User services run while you are logged in; `loginctl enable-linger` keeps the service running from boot. Reading the RAPL CPU energy counter needs a udev rule; `setup` prints the commands and explains the security trade-off (CVE-2020-8694). Without it, wattcost uses an AMD integrated GPU's package power when there is one, and otherwise estimates CPU power.
+
+To update, install the new version the same way, then run `systemctl --user restart wattcost` and `wattcost extension install` (the indicator reloads without logging out).
 
 ## What it measures
 
@@ -91,13 +94,9 @@ GPU: measured 100.0%
 
 ## Top bar indicator (GNOME)
 
-`gnome-extension/` holds a GNOME Shell 50 extension that shows today's cost in the top bar. Clicking it opens a chart with the spending rate (green), the total power (purple) and the CPU (blue) and GPU (orange) power for today, the last week or the current month. It reads the data with `wattcost series --span day|week|month`, which prints JSON.
+The binary carries a GNOME Shell 50 extension (sources in `gnome-extension/`) that shows today's cost in the top bar. Clicking it opens a chart with the spending rate (green), the total power (purple) and the CPU (blue) and GPU (orange) power for today, the last week or the current month, and a gear button for the currency and the day and night rates. It reads the data with `wattcost series --span day|week|month`, which prints JSON.
 
-```sh
-gnome-extension/install.sh
-```
-
-On Wayland, GNOME loads a newly installed extension after you log out and back in. Later runs of `install.sh` reload it in the running session.
+`wattcost setup` installs it; `wattcost extension install` installs or updates it on its own. On Wayland, GNOME loads a newly installed extension after you log out and back in; later updates reload it in the running session.
 
 ## License
 

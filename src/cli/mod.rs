@@ -12,6 +12,7 @@ use clap::{Args, Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
 use crate::config::{self, ConfigSource};
+use crate::extension::{self, Outcome};
 use crate::providers::{self, FsRoot};
 use crate::reprice::{self, Totals};
 use crate::store::Store;
@@ -57,7 +58,21 @@ enum Command {
         /// Write the unit file but do not enable or start it
         #[arg(long)]
         no_enable: bool,
+        /// Do not install the GNOME top bar indicator
+        #[arg(long)]
+        no_extension: bool,
     },
+    /// Manage the GNOME Shell top bar indicator
+    Extension {
+        #[command(subcommand)]
+        action: ExtensionAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum ExtensionAction {
+    /// Install or update the indicator and reload it in the running session
+    Install,
 }
 
 #[derive(Subcommand)]
@@ -113,7 +128,13 @@ pub fn main() -> ExitCode {
         Command::Config {
             action: ConfigAction::Set,
         } => set_tariff(&config_path),
-        Command::Setup { no_enable } => install(&config_path, no_enable),
+        Command::Setup {
+            no_enable,
+            no_extension,
+        } => setup(&config_path, no_enable, no_extension),
+        Command::Extension {
+            action: ExtensionAction::Install,
+        } => install_extension(),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -309,6 +330,27 @@ fn install(config_path: &Path, no_enable: bool) -> anyhow::Result<()> {
     } else {
         println!("\n{}", setup::UDEV_INSTRUCTIONS);
     }
+    Ok(())
+}
+
+fn setup(config_path: &Path, no_enable: bool, no_extension: bool) -> anyhow::Result<()> {
+    install(config_path, no_enable)?;
+    if no_extension {
+        Ok(())
+    } else {
+        install_extension()
+    }
+}
+
+fn install_extension() -> anyhow::Result<()> {
+    let message = match extension::install()? {
+        Outcome::NoGnome => "GNOME Shell was not found; the top bar indicator needs GNOME 50. `wattcost report` shows the numbers.".to_owned(),
+        Outcome::NeedsLogin => "Installed the top bar indicator; log out and back in once to see it.".to_owned(),
+        Outcome::LoaderChanged => "Updated the top bar indicator; log out and back in once to load it.".to_owned(),
+        Outcome::Reloaded => "Reloaded the top bar indicator.".to_owned(),
+        Outcome::NotActive(state) => format!("Updated the top bar indicator; it is not enabled (state: {state}), so nothing was reloaded."),
+    };
+    println!("{message}");
     Ok(())
 }
 

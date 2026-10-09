@@ -4,6 +4,7 @@ pub mod cli;
 pub mod collector;
 pub mod config;
 pub mod energy;
+pub mod extension;
 pub mod pricing;
 pub mod providers;
 pub mod report;
