@@ -294,9 +294,9 @@ fn print_status(config_path: &Path, format: status::Format) -> anyhow::Result<()
         settings.tariff.currency(),
         &settings.config.hardware,
     )?;
-    // A row is written every write interval, so a missed one or two means a slow write, not a
-    // stopped service.
-    let max_age = TimeDelta::seconds(3 * i64::from(settings.config.collector.write_interval_s));
+    // A row is written one write interval after its start; three more intervals allow for a missed
+    // or slow write before the service counts as stopped.
+    let max_age = TimeDelta::seconds(4 * i64::from(settings.config.collector.write_interval_s));
     println!(
         "{}",
         status::build(&day, last.as_ref(), Utc::now(), max_age).render(format)
