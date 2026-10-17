@@ -3,6 +3,8 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::process::{Child, Command, Stdio};
+use std::sync::mpsc;
+use std::time::Duration;
 
 use chrono::{DateTime, TimeZone, Utc};
 use tempfile::TempDir;
@@ -107,24 +109,31 @@ impl Collector {
             .stderr(Stdio::piped())
             .spawn()
             .expect("start wattcost");
-        let mut lines = BufReader::new(child.stderr.take().expect("stderr")).lines();
-        let address = lines.by_ref().map_while(Result::ok).find_map(|line| {
-            let (_, rest) = line.split_once("serving metrics on http://")?;
-            rest.strip_suffix("/metrics").map(str::to_owned)
+        let stderr = BufReader::new(child.stderr.take().expect("stderr"));
+        let (sender, receiver) = mpsc::channel();
+        // Reads to the end: logging into a closed pipe would stop the collector.
+        std::thread::spawn(move || {
+            for line in stderr.lines().map_while(Result::ok) {
+                if let Some((_, rest)) = line.split_once("serving metrics on http://") {
+                    let _ = sender.send(rest.trim_end_matches("/metrics").to_owned());
+                }
+            }
         });
-        // Logging into a closed pipe would stop the collector.
-        std::thread::spawn(move || lines.for_each(drop));
-        Self {
-            address: address.expect("the metrics address in the log"),
+        let address = receiver.recv_timeout(Duration::from_secs(30));
+        let mut collector = Self {
+            address: String::new(),
             child,
             _home: home,
-        }
+        };
+        // Assigned after construction so a missing address still stops the child on drop.
+        collector.address = address.expect("the metrics address in the log");
+        collector
     }
 
     fn request(&self, head: &str) -> String {
         let mut stream = TcpStream::connect(&self.address).expect("connect");
         stream
-            .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+            .set_read_timeout(Some(Duration::from_secs(10)))
             .expect("set a read timeout");
         stream.write_all(head.as_bytes()).expect("send the request");
         let mut response = String::new();
