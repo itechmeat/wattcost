@@ -1,9 +1,10 @@
 //! The foreground collection loop: sampling, recording, signals and config reload.
 
 use std::collections::VecDeque;
+use std::net::{SocketAddr, TcpListener};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant, SystemTime};
 use std::{fs, thread};
 
@@ -14,6 +15,8 @@ use tracing::{error, info, warn};
 
 use crate::collector::Collector;
 use crate::config::{self, Settings};
+use crate::metrics::Metrics;
+use crate::metrics_server;
 use crate::pricing::{self, Pricing};
 use crate::providers::{self, DisplaySensor, FsRoot};
 use crate::sample::RawSample;
@@ -62,10 +65,16 @@ pub(crate) struct Recorder<Tz: TimeZone> {
     settings_id: i64,
     tz: Tz,
     backlog: Backlog<(RawSample, Pricing, i64)>,
+    metrics: Option<Arc<Mutex<Metrics>>>,
 }
 
 impl<Tz: TimeZone> Recorder<Tz> {
-    pub(crate) fn new(store: Store, settings: Settings, tz: Tz) -> Result<Self, StoreError> {
+    pub(crate) fn new(
+        store: Store,
+        settings: Settings,
+        tz: Tz,
+        metrics: Option<Arc<Mutex<Metrics>>>,
+    ) -> Result<Self, StoreError> {
         let settings_id = store.settings_id(&settings.text, Utc::now())?;
         Ok(Self {
             store,
@@ -73,6 +82,7 @@ impl<Tz: TimeZone> Recorder<Tz> {
             settings_id,
             tz,
             backlog: Backlog::default(),
+            metrics,
         })
     }
 
@@ -80,9 +90,14 @@ impl<Tz: TimeZone> Recorder<Tz> {
         let pricing = pricing::price(&self.settings, sample, &self.tz);
         self.backlog
             .push((sample.clone(), pricing, self.settings_id));
-        let store = &self.store;
+        let (store, metrics) = (&self.store, &self.metrics);
+        let hardware = &self.settings.config.hardware;
         self.backlog.flush(|(sample, pricing, settings_id)| {
-            store.insert_sample(sample, pricing, *settings_id)
+            store.insert_sample(sample, pricing, *settings_id)?;
+            if let Some(metrics) = metrics {
+                lock(metrics).record(sample, pricing, hardware);
+            }
+            Ok(())
         })
     }
 
@@ -94,14 +109,22 @@ impl<Tz: TimeZone> Recorder<Tz> {
             || new.hardware.providers != old.hardware.providers
             || new.hardware.cpu_idle_watts != old.hardware.cpu_idle_watts
             || new.hardware.cpu_max_watts != old.hardware.cpu_max_watts
+            || new.metrics != old.metrics
         {
-            warn!("collector, provider and CPU estimate changes apply after a restart");
+            warn!("collector, provider, CPU estimate and metrics changes apply after a restart");
         }
         self.settings_id = self.store.settings_id(&settings.text, Utc::now())?;
+        if let Some(metrics) = &self.metrics {
+            lock(metrics).set_tariff(settings.tariff.clone());
+        }
         self.settings = settings;
         info!("config reloaded");
         Ok(())
     }
+}
+
+fn lock(metrics: &Mutex<Metrics>) -> std::sync::MutexGuard<'_, Metrics> {
+    metrics.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 pub(crate) fn next_tick(now: DateTime<Utc>, interval_s: u32) -> DateTime<Utc> {
@@ -133,7 +156,7 @@ fn modified(path: &Path) -> Option<SystemTime> {
     fs::metadata(path).and_then(|meta| meta.modified()).ok()
 }
 
-pub(crate) fn run(config_path: &Path) -> anyhow::Result<()> {
+pub(crate) fn run(config_path: &Path, metrics_listen: Option<SocketAddr>) -> anyhow::Result<()> {
     let (settings, source) = config::load_or_example(config_path)?;
     if let config::ConfigSource::Example { missing } = &source {
         warn!(
@@ -156,7 +179,10 @@ pub(crate) fn run(config_path: &Path) -> anyhow::Result<()> {
         .display
         .map(|display| Box::new(display) as Box<dyn DisplaySensor>);
     let mut collector = Collector::new(detected.providers, display, &settings.config.collector);
-    let mut recorder = Recorder::new(store, settings, Local)?;
+    let metrics = metrics_listen
+        .or(settings.config.metrics.listen)
+        .and_then(|address| serve_metrics(address, &store, &settings));
+    let mut recorder = Recorder::new(store, settings, Local, metrics)?;
     let mut watcher = ConfigWatcher::new(config_path);
 
     let stop = Arc::new(AtomicBool::new(false));
@@ -191,6 +217,28 @@ pub(crate) fn run(config_path: &Path) -> anyhow::Result<()> {
     }
     info!("stopped");
     Ok(())
+}
+
+/// Starts the endpoint; when it cannot start, collection goes on without it.
+fn serve_metrics(
+    address: SocketAddr,
+    store: &Store,
+    settings: &Settings,
+) -> Option<Arc<Mutex<Metrics>>> {
+    let start = || -> anyhow::Result<_> {
+        let listener = TcpListener::bind(address)?;
+        let bound = listener.local_addr()?;
+        let metrics = Arc::new(Mutex::new(
+            Metrics::load(store, settings).context("loading the metric totals")?,
+        ));
+        metrics_server::spawn(listener, Arc::clone(&metrics))
+            .context("starting the metrics thread")?;
+        info!("serving metrics on http://{bound}/metrics");
+        Ok(metrics)
+    };
+    start()
+        .inspect_err(|error| error!("cannot serve metrics on {address}: {error:#}"))
+        .ok()
 }
 
 fn record<Tz: TimeZone>(recorder: &mut Recorder<Tz>, sample: &RawSample) {
@@ -254,7 +302,7 @@ mod tests {
         let path = dir.path().join("config.toml");
         std::fs::write(&path, "not = [valid").unwrap();
         let temp = TempStore::new();
-        let mut recorder = Recorder::new(temp.open(), Settings::example(), Utc).unwrap();
+        let mut recorder = Recorder::new(temp.open(), Settings::example(), Utc, None).unwrap();
         assert!(recorder.reload(&path).is_err());
         recorder.record(&sample()).unwrap();
         let rows = temp
@@ -277,7 +325,7 @@ mod tests {
         )
         .unwrap();
         let temp = TempStore::new();
-        let mut recorder = Recorder::new(temp.open(), Settings::example(), Utc).unwrap();
+        let mut recorder = Recorder::new(temp.open(), Settings::example(), Utc, None).unwrap();
         recorder.reload(&path).unwrap();
         recorder.record(&sample()).unwrap();
         let rows = temp

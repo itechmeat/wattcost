@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-17
+
+### Added
+
+- An optional Prometheus endpoint: `[metrics] listen` in the config or `wattcost run --metrics-listen <addr>` serves `GET /metrics` with the current power by part and from the wall, energy and cost counters that continue from the database after a restart, the current price per kWh with its tariff period, the time of the last stored row and the version.
+
+### Changed
+
+- serde_json 1.0.154.
+
 ## [0.1.1] - 2026-10-09
 
 ### Added

@@ -1,5 +1,6 @@
 //! SQLite storage of rows and of the settings they were priced with.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
@@ -39,6 +40,16 @@ pub struct StoredSample {
     pub id: i64,
     pub sample: RawSample,
     pub pricing: Pricing,
+}
+
+/// Sums over every stored row.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StoredTotals {
+    pub cpu_energy_j: f64,
+    pub gpu_energy_j: f64,
+    pub wall_wh: f64,
+    /// Cost per currency.
+    pub cost: BTreeMap<String, f64>,
 }
 
 #[derive(Debug)]
@@ -168,6 +179,40 @@ impl Store {
             .prepare(&format!("SELECT {COLUMNS} FROM samples WHERE ts_start >= ?1 AND ts_start < ?2 ORDER BY ts_start, id"))?;
         let rows = statement.query_map(params![from.timestamp(), to.timestamp()], read_row)?;
         rows.map(|row| row?.into_stored()).collect()
+    }
+
+    pub fn totals(&self) -> Result<StoredTotals, StoreError> {
+        let (cpu_energy_j, gpu_energy_j, wall_wh) = self.conn.query_row(
+            "SELECT COALESCE(SUM(cpu_energy_j), 0), COALESCE(SUM(gpu_energy_j), 0), \
+             COALESCE(SUM(wall_wh), 0) FROM samples",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        let mut statement = self
+            .conn
+            .prepare("SELECT currency, SUM(cost) FROM samples GROUP BY currency")?;
+        let cost = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<_, _>>()?;
+        Ok(StoredTotals {
+            cpu_energy_j,
+            gpu_energy_j,
+            wall_wh,
+            cost,
+        })
+    }
+
+    /// The most recently stored row; by insertion, so a wall clock set back cannot hide it.
+    pub fn last_sample(&self) -> Result<Option<StoredSample>, StoreError> {
+        self.conn
+            .query_row(
+                &format!("SELECT {COLUMNS} FROM samples ORDER BY id DESC LIMIT 1"),
+                [],
+                read_row,
+            )
+            .optional()?
+            .map(DbRow::into_stored)
+            .transpose()
     }
 
     pub fn update_pricing(

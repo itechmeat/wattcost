@@ -38,7 +38,11 @@ enum Command {
     /// Show which sensors are available and the config in use
     Detect,
     /// Collect measurements in the foreground
-    Run,
+    Run {
+        /// Serve Prometheus metrics at http://ADDR/metrics (overrides `metrics.listen`)
+        #[arg(long, value_name = "ADDR")]
+        metrics_listen: Option<std::net::SocketAddr>,
+    },
     /// Summarise energy and cost (default: today)
     Report(ReportArgs),
     /// Recompute stored prices for a date range with the current config
@@ -118,7 +122,7 @@ pub fn main() -> ExitCode {
     let config_path = cli.config.unwrap_or_else(config::default_path);
     let result = match cli.command {
         Command::Detect => detect(&config_path),
-        Command::Run => run::run(&config_path),
+        Command::Run { metrics_listen } => run::run(&config_path, metrics_listen),
         Command::Report(args) => report(&config_path, &args),
         Command::Reprice(args) => reprice(&config_path, &args),
         Command::Series { span } => print_series(&config_path, span),

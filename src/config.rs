@@ -1,6 +1,7 @@
 //! User configuration: collector timing, hardware constants and the electricity tariff.
 
 use std::collections::BTreeMap;
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
@@ -56,7 +57,16 @@ pub struct Config {
     pub collector: CollectorConfig,
     #[serde(default)]
     pub hardware: HardwareConfig,
+    #[serde(default)]
+    pub metrics: MetricsConfig,
     pub tariff: TariffConfig,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct MetricsConfig {
+    /// Address of the Prometheus endpoint; none keeps it off.
+    pub listen: Option<SocketAddr>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -297,6 +307,23 @@ mod tests {
                 .to_string()
                 .contains("unknown provider")
         );
+    }
+
+    #[test]
+    fn metrics_listen_is_an_ip_address_and_port() {
+        let config = |listen: &str| {
+            Settings::parse(EXAMPLE_CONFIG.replace(
+                "# listen = \"127.0.0.1:9877\"",
+                &format!("listen = \"{listen}\""),
+            ))
+            .map(|settings| settings.config.metrics.listen)
+        };
+        assert_eq!(
+            config("127.0.0.1:9877").unwrap(),
+            Some(SocketAddr::from(([127, 0, 0, 1], 9877)))
+        );
+        assert!(config("localhost").is_err());
+        assert_eq!(Settings::example().config.metrics.listen, None);
     }
 
     #[test]
