@@ -123,6 +123,9 @@ impl Collector {
 
     fn request(&self, head: &str) -> String {
         let mut stream = TcpStream::connect(&self.address).expect("connect");
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+            .expect("set a read timeout");
         stream.write_all(head.as_bytes()).expect("send the request");
         let mut response = String::new();
         stream
