@@ -202,10 +202,11 @@ impl Store {
         })
     }
 
+    /// The most recently stored row; by insertion, so a wall clock set back cannot hide it.
     pub fn last_sample(&self) -> Result<Option<StoredSample>, StoreError> {
         self.conn
             .query_row(
-                &format!("SELECT {COLUMNS} FROM samples ORDER BY ts_start DESC, id DESC LIMIT 1"),
+                &format!("SELECT {COLUMNS} FROM samples ORDER BY id DESC LIMIT 1"),
                 [],
                 read_row,
             )
