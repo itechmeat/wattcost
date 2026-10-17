@@ -191,10 +191,18 @@ Validation: periods must cover all 24 hours without overlap (a period may cross 
 ## Commands
 
 1. `wattcost detect`: providers, devices, quality, permission hints, the config in use.
-2. `wattcost run`: the collector, in the foreground; logs to stderr (journald under systemd).
+2. `wattcost run`: the collector, in the foreground; logs to stderr (journald under systemd). With `[metrics] listen` or `--metrics-listen ADDR` it also serves Prometheus metrics (see below).
 3. `wattcost report [--day|--week|--month] [--from DATE --to DATE]`: per tariff period and in total: hours covered, hours with the monitor on, average and peak power, kWh, cost; plus the share of rows by data quality. The current partial minute is not included.
 4. `wattcost reprice --from DATE [--to DATE] [--dry-run]`: see above.
 5. `wattcost setup`: writes the systemd user unit `wattcost.service` (enabled, `Restart=on-failure`) and prints the udev rule and the `sudo` commands for RAPL access. It does not run `sudo` itself.
+
+## Prometheus endpoint (0.2)
+
+1. Off by default; `[metrics] listen = "IP:PORT"` or `run --metrics-listen IP:PORT` (the flag wins) starts a small std-only HTTP/1.1 listener on its own thread in the collector process. Only `GET` and `HEAD /metrics` are answered (405 for other methods, 404 for other paths), one connection at a time, with a 5 s limit per request and an 8 KiB limit on the request head. If the address cannot be bound, the error is logged and collection goes on.
+2. Format: Prometheus text 0.0.4. Energy is in joules (the base unit), so counters follow the naming conventions; cost is a counter per currency.
+3. Counters start from SQL sums over all stored rows and grow with every stored row, so a restart continues them. A `reprice` that lowers stored totals shows after a restart as a counter reset.
+4. Gauges describe the last stored row (power by part and from the wall, its end time); the price comes from the tariff in force at scrape time. Nothing else from the config is exposed.
+5. No authentication: access is left to the network (loopback, a VPN, a firewall); `SECURITY.md` says so.
 
 ## Code layout
 

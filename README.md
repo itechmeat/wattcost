@@ -92,6 +92,58 @@ CPU: measured 100.0%
 GPU: measured 100.0%
 ```
 
+## Prometheus metrics
+
+`wattcost run` can serve its data in the Prometheus text format, so Prometheus, VictoriaMetrics, Grafana Agent or any other scraper can collect it. The endpoint is off by default. Turn it on in `~/.config/wattcost/config.toml` and restart the service:
+
+```toml
+[metrics]
+listen = "127.0.0.1:9877"
+```
+
+`wattcost run --metrics-listen 127.0.0.1:9877` does the same for one run and overrides the file. The address is an IP address and a port; use `0.0.0.0:9877` (or `[::]:9877`) to let other machines scrape it. Only `GET /metrics` is served.
+
+| Metric | Type | Meaning |
+|---|---|---|
+| `wattcost_power_watts{component="cpu\|gpu\|base\|monitor"}` | gauge | Average power over the last stored row (one minute by default); `cpu`, `gpu` and `base` before power-supply losses, `base` and `monitor` from the configured constants |
+| `wattcost_wall_power_watts` | gauge | Average power drawn from the wall over the last stored row |
+| `wattcost_energy_joules_total{component="cpu\|gpu"}` | counter | CPU and GPU energy over all stored rows |
+| `wattcost_wall_energy_joules_total` | counter | Wall energy over all stored rows |
+| `wattcost_cost_total{currency}` | counter | Cost over all stored rows, at the prices stored with them |
+| `wattcost_price_per_kwh{currency,period}` | gauge | Price of one kWh in the tariff period in force now |
+| `wattcost_last_sample_timestamp_seconds` | gauge | End of the last stored row as a Unix time |
+| `wattcost_build_info{version}` | gauge | Always 1 |
+
+Energy is in joules, the Prometheus base unit; divide by 3.6e6 for kWh. The counters start from the totals in the database, so a restart continues them. `wattcost reprice` changes the stored costs; the running service shows the new totals after a restart, which Prometheus sees as a counter reset when the total went down.
+
+A scrape job:
+
+```yaml
+scrape_configs:
+  - job_name: wattcost
+    scrape_interval: 60s
+    static_configs:
+      - targets: ["desktop.example:9877"]
+```
+
+PromQL examples:
+
+```promql
+# Wall power now, in watts
+wattcost_wall_power_watts
+# Energy over the last 24 hours, in kWh
+increase(wattcost_wall_energy_joules_total[24h]) / 3.6e6
+# Cost over the last 24 hours and the last 30 days
+increase(wattcost_cost_total[24h])
+increase(wattcost_cost_total[30d])
+# Today or this month in Grafana: a "Today so far" or "This month so far" time range and
+increase(wattcost_cost_total[$__range])
+# Alert when the collector has stopped writing rows
+time() - wattcost_last_sample_timestamp_seconds > 300
+```
+
+The endpoint has no authentication or TLS and shows when the computer is in use. Keep it on `127.0.0.1`, or bind it to a private network (a VPN or tailnet) and limit the port with a firewall.
+
 ## Top bar indicator (GNOME)
 
 The binary carries a GNOME Shell 50 extension (sources in `gnome-extension/`) that shows today's cost in the top bar. Clicking it opens a chart with the spending rate (green), the total power (purple) and the CPU (blue) and GPU (orange) power for today, the last week or the current month, and a gear button for the currency and the day and night rates. It reads the data with `wattcost series --span day|week|month`, which prints JSON.

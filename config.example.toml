@@ -20,6 +20,11 @@ cpu_max_watts = 120.0
 # Force providers on or off: rapl, cpu_stat, cpu_estimate, nvml, amdgpu, battery, display.
 # providers = { amdgpu = false }
 
+[metrics]
+# Serve Prometheus metrics at http://<listen>/metrics; off when unset. There is no
+# authentication, so keep it on 127.0.0.1 or limit who can reach the port.
+# listen = "127.0.0.1:9877"
+
 [tariff]
 currency = "EUR"
 # Discounts that apply to the energy price only, e.g. 0.95 for 5 % off.
