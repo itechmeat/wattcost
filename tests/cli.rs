@@ -105,3 +105,14 @@ fn report_rejects_an_end_date_without_a_start() {
     let output = Wattcost::new().run(&["report", "--to", "2026-01-31"], "");
     assert_eq!(output.status.code(), Some(2));
 }
+
+#[test]
+fn status_without_data_shows_a_zero_cost_for_bars() {
+    let wattcost = Wattcost::new();
+    let output = wattcost.run(&["status"], "");
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "0.00 EUR\n");
+    let waybar = wattcost.json(&["status", "--format", "waybar"]);
+    assert_eq!(waybar["text"], "0.00 EUR");
+    assert_eq!(waybar["class"], "stale");
+}

@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-17
+
+### Added
+
+- `wattcost status` prints today's cost and the current power on one line; `--format waybar` prints Waybar custom-module JSON (text, a tooltip with today's energy, average and peak power, and the class `ok` or `stale`), which the Omarchy shell bar reads as well. The README shows a Waybar and an Omarchy module.
+- On desktops without GNOME Shell, `wattcost setup` points to `wattcost status --format waybar`.
+
+### Fixed
+
+- Today's cost of a day without rows was -0.0 in `wattcost series`.
+
 ## [0.2.0] - 2026-10-17
 
 ### Added

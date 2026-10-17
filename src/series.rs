@@ -183,11 +183,13 @@ pub fn build<Tz: TimeZone>(
         span,
         label: range.label,
         currency: currency.to_owned(),
+        // An empty float sum is -0.0, which prints as "-0.00"; adding 0.0 turns it into 0.0.
         today_cost: rows
             .iter()
             .filter(|row| row.sample.start >= today_start)
             .map(|row| row.pricing.cost)
-            .sum(),
+            .sum::<f64>()
+            + 0.0,
         total_cost: total.cost,
         total_kwh: total.wall_wh / 1000.0,
         average_w: total.average_w(),
@@ -439,5 +441,10 @@ mod tests {
             keys(&json["points"][0]),
             ["average_w", "cost_per_hour", "cpu_w", "gpu_w"]
         );
+    }
+
+    #[test]
+    fn no_rows_cost_a_positive_zero() {
+        assert!(series(Span::Day, &[]).today_cost.is_sign_positive());
     }
 }

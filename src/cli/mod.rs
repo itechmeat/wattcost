@@ -7,7 +7,7 @@ use std::process::{Command as Process, ExitCode};
 use std::{env, fs};
 
 use anyhow::{Context, bail};
-use chrono::{Local, Utc};
+use chrono::{Local, TimeDelta, Utc};
 use clap::{Args, Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
@@ -18,7 +18,7 @@ use crate::reprice::{self, Totals};
 use crate::settings_form::{self, SettingsForm};
 use crate::store::Store;
 use crate::time_range::{self, Range, Span};
-use crate::{report, series, setup};
+use crate::{report, series, setup, status};
 
 #[derive(Parser)]
 #[command(
@@ -56,6 +56,11 @@ enum Command {
     Series {
         #[arg(long, value_enum, default_value = "day")]
         span: Span,
+    },
+    /// Print today's cost and the current power on one line, for status bars such as Waybar
+    Status {
+        #[arg(long, value_enum, default_value = "text")]
+        format: status::Format,
     },
     /// Install the systemd user service and explain how to enable CPU energy readings
     Setup {
@@ -126,6 +131,7 @@ pub fn main() -> ExitCode {
         Command::Report(args) => report(&config_path, &args),
         Command::Reprice(args) => reprice(&config_path, &args),
         Command::Series { span } => print_series(&config_path, span),
+        Command::Status { format } => print_status(&config_path, format),
         Command::Config {
             action: ConfigAction::Show,
         } => show_settings(&config_path),
@@ -261,6 +267,33 @@ fn print_series(config_path: &Path, span: Span) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn print_status(config_path: &Path, format: status::Format) -> anyhow::Result<()> {
+    let (settings, _) = config::load_or_example(config_path)?;
+    let today = Local::now().date_naive();
+    let range = time_range::span_range(Span::Day, today, &Local)?;
+    let store = open_existing_store(&settings)?;
+    let (rows, last) = match &store {
+        Some(store) => (store.samples(range.from, range.to)?, store.last_sample()?),
+        None => (Vec::new(), None),
+    };
+    let day = series::build(
+        Span::Day,
+        today,
+        &Local,
+        &rows,
+        settings.tariff.currency(),
+        &settings.config.hardware,
+    )?;
+    // A row is written every write interval, so a missed one or two means a slow write, not a
+    // stopped service.
+    let max_age = TimeDelta::seconds(3 * i64::from(settings.config.collector.write_interval_s));
+    println!(
+        "{}",
+        status::build(&day, last.as_ref(), Utc::now(), max_age).render(format)
+    );
+    Ok(())
+}
+
 fn reprice(config_path: &Path, args: &RepriceArgs) -> anyhow::Result<()> {
     let (settings, _) = config::load_or_example(config_path)?;
     let Some(mut store) = open_existing_store(&settings)? else {
@@ -348,7 +381,7 @@ fn setup(config_path: &Path, no_enable: bool, no_extension: bool) -> anyhow::Res
 
 fn install_extension() -> anyhow::Result<()> {
     let message = match extension::install()? {
-        Outcome::NoGnome => "GNOME Shell was not found; the top bar indicator needs GNOME 50. `wattcost report` shows the numbers.".to_owned(),
+        Outcome::NoGnome => "GNOME Shell was not found; the top bar indicator needs GNOME 50. `wattcost report` shows the numbers, and `wattcost status --format waybar` feeds Waybar and other status bars.".to_owned(),
         Outcome::NeedsLogin => "Installed the top bar indicator; log out and back in once to see it.".to_owned(),
         Outcome::LoaderChanged => "Updated the top bar indicator; log out and back in once to load it.".to_owned(),
         Outcome::Reloaded => "Reloaded the top bar indicator.".to_owned(),

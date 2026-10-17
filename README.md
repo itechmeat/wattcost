@@ -150,6 +150,28 @@ The binary carries a GNOME Shell 50 extension (sources in `gnome-extension/`) th
 
 `wattcost setup` installs it; `wattcost extension install` installs or updates it on its own. On Wayland, GNOME loads a newly installed extension after you log out and back in; later updates reload it in the running session.
 
+## Other status bars (Waybar, Omarchy)
+
+`wattcost status` prints today's cost and the current power on one line, for example `1.23 EUR · 45 W`; the power is left out when the service has not written a row for three write intervals. `wattcost status --format waybar` prints the same as Waybar custom-module JSON, with today's energy, average and peak power in the tooltip and the class `ok` or `stale`.
+
+A Waybar module (`~/.config/waybar/config.jsonc`, add `"custom/wattcost"` to a `modules-*` list):
+
+```jsonc
+"custom/wattcost": {
+  "exec": "wattcost status --format waybar",
+  "return-type": "json",
+  "interval": 60
+}
+```
+
+The Omarchy shell bar (`~/.config/omarchy/shell.json`, inside `bar.layout.left`, `center` or `right`) reads the same JSON:
+
+```json
+{ "id": "wattcost", "type": "command", "exec": "wattcost status --format waybar", "interval": 60 }
+```
+
+If the bar cannot find the binary, give its full path, for example `~/.local/bin/wattcost`.
+
 ## License
 
 Licensed under the [Apache License, Version 2.0](LICENSE).
