@@ -15,6 +15,7 @@ pub mod sample;
 pub mod series;
 pub mod settings_form;
 pub mod setup;
+pub mod status;
 pub mod store;
 pub mod tariff;
 pub mod time_range;

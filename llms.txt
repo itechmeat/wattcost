@@ -11,7 +11,7 @@ Work through the steps in order. Explain each step to the user in one short sent
 ### 1. Check the machine
 
 1. It must be Linux with systemd: `uname -s` prints `Linux` and `systemctl --user status` works.
-2. Note the CPU architecture (`uname -m`) and the desktop: `echo $XDG_CURRENT_DESKTOP` and `gnome-shell --version`. The top bar indicator needs GNOME Shell 50; on other desktops tell the user that `wattcost report` shows the numbers.
+2. Note the CPU architecture (`uname -m`) and the desktop: `echo $XDG_CURRENT_DESKTOP` and `gnome-shell --version`. The top bar indicator needs GNOME Shell 50; on other desktops tell the user that `wattcost report` shows the numbers and that `wattcost status --format waybar` feeds Waybar or the Omarchy bar (README section "Other status bars"), and offer to add that module to their bar config.
 
 ### 2. Install the binary
 
