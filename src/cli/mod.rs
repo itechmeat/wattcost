@@ -131,7 +131,17 @@ pub fn main() -> ExitCode {
         Command::Report(args) => report(&config_path, &args),
         Command::Reprice(args) => reprice(&config_path, &args),
         Command::Series { span } => print_series(&config_path, span),
-        Command::Status { format } => print_status(&config_path, format),
+        Command::Status { format } => {
+            print_status(&config_path, format).or_else(|error| match format {
+                // A bar hides a module whose command fails, which would hide the reason as well.
+                status::Format::Waybar => {
+                    eprintln!("error: {error:#}");
+                    println!("{}", status::waybar_error(&format!("{error:#}")));
+                    Ok(())
+                }
+                status::Format::Text => Err(error),
+            })
+        }
         Command::Config {
             action: ConfigAction::Show,
         } => show_settings(&config_path),

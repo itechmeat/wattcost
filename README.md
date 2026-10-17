@@ -152,7 +152,7 @@ The binary carries a GNOME Shell 50 extension (sources in `gnome-extension/`) th
 
 ## Other status bars (Waybar, Omarchy)
 
-`wattcost status` prints today's cost and the current power on one line, for example `1.23 EUR · 45 W`; the power is left out when the service has not written a row for three write intervals. `wattcost status --format waybar` prints the same as Waybar custom-module JSON, with today's energy, average and peak power in the tooltip and the class `ok` or `stale`.
+`wattcost status` prints today's cost and the current power on one line, for example `1.23 EUR · 45 W`; the power is left out when the last row started more than three write intervals ago. `wattcost status --format waybar` prints the same as Waybar custom-module JSON, with today's energy, average and peak power in the tooltip and the class `ok` or `stale`; when the config or the database cannot be read it prints `wattcost: error` with the reason in the tooltip and the class `error`, so the module does not vanish.
 
 A Waybar module (`~/.config/waybar/config.jsonc`, add `"custom/wattcost"` to a `modules-*` list):
 

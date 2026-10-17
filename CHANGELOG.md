@@ -8,7 +8,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
-- `wattcost status` prints today's cost and the current power on one line; `--format waybar` prints Waybar custom-module JSON (text, a tooltip with today's energy, average and peak power, and the class `ok` or `stale`), which the Omarchy shell bar reads as well. The README shows a Waybar and an Omarchy module.
+- `wattcost status` prints today's cost and the current power on one line; `--format waybar` prints Waybar custom-module JSON (text, a tooltip with today's energy, average and peak power, and the class `ok`, `stale` or `error`; errors still print a line so the module does not vanish), which the Omarchy shell bar reads as well. The README shows a Waybar and an Omarchy module.
 - On desktops without GNOME Shell, `wattcost setup` points to `wattcost status --format waybar`.
 
 ### Fixed

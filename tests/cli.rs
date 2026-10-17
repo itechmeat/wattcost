@@ -116,3 +116,15 @@ fn status_without_data_shows_a_zero_cost_for_bars() {
     assert_eq!(waybar["text"], "0.00 EUR");
     assert_eq!(waybar["class"], "stale");
 }
+
+#[test]
+fn status_for_a_bar_reports_a_broken_config_as_json() {
+    let wattcost = Wattcost::new();
+    let config = wattcost.home.path().join("config/wattcost");
+    std::fs::create_dir_all(&config).unwrap();
+    std::fs::write(config.join("config.toml"), "[tariff\n").unwrap();
+    let waybar = wattcost.json(&["status", "--format", "waybar"]);
+    assert_eq!(waybar["text"], "wattcost: error");
+    assert_eq!(waybar["class"], "error");
+    assert!(!wattcost.run(&["status"], "").status.success());
+}

@@ -12,8 +12,8 @@ use crate::store::StoredSample;
 pub enum Format {
     /// `1.23 EUR · 45 W`
     Text,
-    /// Waybar custom-module JSON: `text`, `tooltip` and `class` (`ok`, or `stale` when no row was
-    /// written lately)
+    /// Waybar custom-module JSON: `text`, `tooltip` and `class` (`ok`, `stale` when no row was
+    /// written lately, or `error`)
     Waybar,
 }
 
@@ -35,7 +35,7 @@ struct Waybar<'a> {
     class: &'static str,
 }
 
-/// Today's totals from the day series and the current power from the last row, if it ended no
+/// Today's totals from the day series and the current power from the last row, if it started no
 /// more than `max_age` before `now`.
 pub fn build(
     day: &Series,
@@ -44,10 +44,9 @@ pub fn build(
     max_age: TimeDelta,
 ) -> Status {
     let now_w = last
-        .filter(|row| {
-            let since_end_s = (now - row.sample.start).as_seconds_f64() - row.sample.duration_s;
-            since_end_s <= max_age.as_seconds_f64()
-        })
+        // A row starts at its write bucket's boundary and its duration counts only the sampled
+        // seconds, so start plus duration is not when it was written; age is taken from the start.
+        .filter(|row| now - row.sample.start <= max_age)
         .and_then(|row| energy::average_watts(row.pricing.wall_wh, row.sample.duration_s));
     Status {
         currency: day.currency.clone(),
@@ -57,6 +56,17 @@ pub fn build(
         average_w: day.average_w,
         peak_w: day.peak_w,
     }
+}
+
+/// Waybar JSON for a status that could not be read, so the module shows the problem instead of
+/// disappearing.
+pub fn waybar_error(message: &str) -> String {
+    let waybar = Waybar {
+        text: "wattcost: error",
+        tooltip: message.to_owned(),
+        class: "error",
+    };
+    serde_json::to_string(&waybar).expect("a struct of strings serializes")
 }
 
 impl Status {
@@ -126,12 +136,12 @@ mod tests {
         }
     }
 
-    fn row_ending_at(end: DateTime<Utc>, wall_wh: f64) -> StoredSample {
+    fn row_starting_at(start: DateTime<Utc>, duration_s: f64, wall_wh: f64) -> StoredSample {
         StoredSample {
             id: 1,
             sample: RawSample {
-                start: end - TimeDelta::seconds(60),
-                duration_s: 60.0,
+                start,
+                duration_s,
                 ..RawSample::default()
             },
             pricing: Pricing {
@@ -150,15 +160,23 @@ mod tests {
 
     #[test]
     fn a_recent_row_gives_the_current_power() {
-        let row = row_ending_at(noon() - TimeDelta::seconds(30), 1.5);
+        let row = row_starting_at(noon() - TimeDelta::seconds(90), 60.0, 1.5);
         let status = build(&day(), Some(&row), noon(), TimeDelta::minutes(3));
         assert_eq!(status.now_w, Some(90.0));
         assert_eq!(status.render(Format::Text), "1.23 EUR · 90 W");
     }
 
     #[test]
+    fn a_partly_sampled_row_is_as_fresh_as_its_bucket() {
+        // Sampled only for the last 10 s of a bucket that started 150 s ago.
+        let row = row_starting_at(noon() - TimeDelta::seconds(150), 10.0, 0.25);
+        let status = build(&day(), Some(&row), noon(), TimeDelta::minutes(3));
+        assert_eq!(status.now_w, Some(90.0));
+    }
+
+    #[test]
     fn an_old_row_or_none_shows_only_the_cost() {
-        let old = row_ending_at(noon() - TimeDelta::minutes(4), 1.5);
+        let old = row_starting_at(noon() - TimeDelta::minutes(4), 60.0, 1.5);
         for last in [Some(&old), None] {
             let status = build(&day(), last, noon(), TimeDelta::minutes(3));
             assert_eq!(status.now_w, None);
@@ -168,7 +186,7 @@ mod tests {
 
     #[test]
     fn waybar_json_carries_text_tooltip_and_class() {
-        let row = row_ending_at(noon(), 1.5);
+        let row = row_starting_at(noon() - TimeDelta::seconds(60), 60.0, 1.5);
         let fresh = build(&day(), Some(&row), noon(), TimeDelta::minutes(3));
         let json: serde_json::Value = serde_json::from_str(&fresh.render(Format::Waybar)).unwrap();
         assert_eq!(json["text"], "1.23 EUR · 90 W");
