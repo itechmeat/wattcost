@@ -111,7 +111,7 @@ listen = "127.0.0.1:9877"
 | `wattcost_wall_energy_joules_total` | counter | Wall energy over all stored rows |
 | `wattcost_cost_total{currency}` | counter | Cost over all stored rows, at the prices stored with them |
 | `wattcost_price_per_kwh{currency,period}` | gauge | Price of one kWh in the tariff period in force now |
-| `wattcost_last_sample_timestamp_seconds` | gauge | End of the last stored row as a Unix time |
+| `wattcost_last_sample_timestamp_seconds` | gauge | Start of the interval of the last stored row as a Unix time |
 | `wattcost_build_info{version}` | gauge | Always 1 |
 
 Energy is in joules, the Prometheus base unit; divide by 3.6e6 for kWh. The counters start from the totals in the database, so a restart continues them. `wattcost reprice` changes the stored costs; the running service shows the new totals after a restart, which Prometheus sees as a counter reset when the total went down.

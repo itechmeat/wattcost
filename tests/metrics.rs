@@ -102,6 +102,7 @@ impl Collector {
             .arg(&config)
             .args(["run", "--metrics-listen", "127.0.0.1:0"])
             .env("NO_COLOR", "1")
+            .env("RUST_LOG", "info")
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
@@ -194,7 +195,7 @@ fn serves_totals_and_the_last_row_from_the_database() {
     assert_close(value(body, "wattcost_wall_power_watts"), 120.0);
     assert_close(
         value(body, "wattcost_last_sample_timestamp_seconds"),
-        (start().timestamp() + 120) as f64,
+        (start().timestamp() + 60) as f64,
     );
     assert_close(
         value(

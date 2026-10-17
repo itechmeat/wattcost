@@ -201,7 +201,7 @@ Validation: periods must cover all 24 hours without overlap (a period may cross 
 1. Off by default; `[metrics] listen = "IP:PORT"` or `run --metrics-listen IP:PORT` (the flag wins) starts a small std-only HTTP/1.1 listener on its own thread in the collector process. Only `GET` and `HEAD /metrics` are answered (405 for other methods, 404 for other paths), one connection at a time, with a 5 s limit per request and an 8 KiB limit on the request head. If the address cannot be bound, the error is logged and collection goes on.
 2. Format: Prometheus text 0.0.4. Energy is in joules (the base unit), so counters follow the naming conventions; cost is a counter per currency.
 3. Counters start from SQL sums over all stored rows and grow with every stored row, so a restart continues them. A `reprice` that lowers stored totals shows after a restart as a counter reset.
-4. Gauges describe the last stored row (power by part and from the wall, its end time); the price comes from the tariff in force at scrape time. Nothing else from the config is exposed.
+4. Gauges describe the last stored row (power by part and from the wall, its start time); the price comes from the tariff in force at scrape time. Nothing else from the config is exposed.
 5. No authentication: access is left to the network (loopback, a VPN, a firewall); `SECURITY.md` says so.
 
 ## Code layout

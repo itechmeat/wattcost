@@ -83,7 +83,12 @@ fn read_head(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
     let deadline = Instant::now() + REQUEST_TIMEOUT;
     let mut head = Vec::new();
     let mut buffer = [0; 1024];
-    while !head.windows(4).any(|window| window == b"\r\n\r\n") {
+    let mut scanned = 0;
+    while !head[scanned..]
+        .windows(4)
+        .any(|window| window == b"\r\n\r\n")
+    {
+        scanned = head.len().saturating_sub(3);
         let left = deadline.saturating_duration_since(Instant::now());
         if left.is_zero() || head.len() > MAX_HEAD {
             return Err(io::Error::new(
@@ -94,7 +99,12 @@ fn read_head(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
         stream.set_read_timeout(Some(left))?;
         stream.set_write_timeout(Some(REQUEST_TIMEOUT))?;
         match stream.read(&mut buffer)? {
-            0 => break,
+            0 => {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "connection closed before the request head ended",
+                ));
+            }
             read => head.extend_from_slice(&buffer[..read]),
         }
     }

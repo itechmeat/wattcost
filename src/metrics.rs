@@ -1,9 +1,8 @@
 //! Prometheus metrics: lifetime counters from the database and gauges from the last stored row.
 
 use std::fmt::Write;
-use std::time::Duration;
 
-use chrono::{DateTime, TimeDelta, Utc};
+use chrono::{DateTime, Utc};
 
 use crate::config::{HardwareConfig, Settings};
 use crate::energy;
@@ -19,7 +18,7 @@ const JOULES_PER_WH: f64 = 3600.0;
 /// Average power of one row by part.
 #[derive(Debug, Clone, PartialEq)]
 struct LastRow {
-    end: DateTime<Utc>,
+    start: DateTime<Utc>,
     cpu_w: Option<f64>,
     gpu_w: Option<f64>,
     base_w: f64,
@@ -32,11 +31,7 @@ impl LastRow {
         let seconds = sample.duration_s;
         let per_second = |joules: f64| (seconds > 0.0).then(|| joules / seconds);
         Self {
-            end: sample.start
-                + Duration::try_from_secs_f64(seconds)
-                    .ok()
-                    .and_then(|duration| TimeDelta::from_std(duration).ok())
-                    .unwrap_or_default(),
+            start: sample.start,
             cpu_w: sample.cpu.energy_j.and_then(per_second),
             gpu_w: sample.gpu.energy_j.and_then(per_second),
             base_w: hardware.base_watts,
@@ -110,8 +105,8 @@ impl Metrics {
             out.family(
                 "wattcost_last_sample_timestamp_seconds",
                 "gauge",
-                "End of the last stored row as a Unix time.",
-                [(vec![], Some(last.end.timestamp_millis() as f64 / 1000.0))],
+                "Start of the interval of the last stored row as a Unix time.",
+                [(vec![], Some(last.start.timestamp() as f64))],
             );
         }
         out.family(
