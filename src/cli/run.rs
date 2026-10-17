@@ -179,10 +179,9 @@ pub(crate) fn run(config_path: &Path, metrics_listen: Option<SocketAddr>) -> any
         .display
         .map(|display| Box::new(display) as Box<dyn DisplaySensor>);
     let mut collector = Collector::new(detected.providers, display, &settings.config.collector);
-    let metrics = match metrics_listen.or(settings.config.metrics.listen) {
-        Some(address) => serve_metrics(address, &store, &settings)?,
-        None => None,
-    };
+    let metrics = metrics_listen
+        .or(settings.config.metrics.listen)
+        .and_then(|address| serve_metrics(address, &store, &settings));
     let mut recorder = Recorder::new(store, settings, Local, metrics)?;
     let mut watcher = ConfigWatcher::new(config_path);
 
@@ -220,28 +219,26 @@ pub(crate) fn run(config_path: &Path, metrics_listen: Option<SocketAddr>) -> any
     Ok(())
 }
 
-/// Starts the endpoint; when the address cannot be bound, collection goes on without it.
+/// Starts the endpoint; when it cannot start, collection goes on without it.
 fn serve_metrics(
     address: SocketAddr,
     store: &Store,
     settings: &Settings,
-) -> anyhow::Result<Option<Arc<Mutex<Metrics>>>> {
-    let listener = match TcpListener::bind(address) {
-        Ok(listener) => listener,
-        Err(error) => {
-            error!("cannot serve metrics on {address}: {error}");
-            return Ok(None);
-        }
+) -> Option<Arc<Mutex<Metrics>>> {
+    let start = || -> anyhow::Result<_> {
+        let listener = TcpListener::bind(address)?;
+        let bound = listener.local_addr()?;
+        let metrics = Arc::new(Mutex::new(
+            Metrics::load(store, settings).context("loading the metric totals")?,
+        ));
+        metrics_server::spawn(listener, Arc::clone(&metrics))
+            .context("starting the metrics thread")?;
+        info!("serving metrics on http://{bound}/metrics");
+        Ok(metrics)
     };
-    let bound = listener
-        .local_addr()
-        .context("reading the metrics address")?;
-    let metrics = Arc::new(Mutex::new(
-        Metrics::load(store, settings).context("loading the metric totals")?,
-    ));
-    metrics_server::spawn(listener, Arc::clone(&metrics)).context("starting the metrics thread")?;
-    info!("serving metrics on http://{bound}/metrics");
-    Ok(Some(metrics))
+    start()
+        .inspect_err(|error| error!("cannot serve metrics on {address}: {error:#}"))
+        .ok()
 }
 
 fn record<Tz: TimeZone>(recorder: &mut Recorder<Tz>, sample: &RawSample) {
